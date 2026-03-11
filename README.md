@@ -6,6 +6,29 @@ A Norton Commander-style MySQL manager – dual-panel, keyboard-driven, built on
 
 DBCommander brings the classic two-panel file manager experience to MySQL. Navigate databases, tables, and rows with the keyboard, run SQL from a command line, view and edit rows inline, copy tables across connections – all in a browser, all without leaving the keyboard.
 
+## Screenshots
+
+![Dual-panel table browser](docs/screenshots/dual-panel.png)
+*Dual-panel layout – each panel has its own connection, database, and cursor*
+
+![Connection picker](docs/screenshots/connection-picker.png)
+*Connection picker – switch connections per panel independently*
+
+![Row viewer](docs/screenshots/row-viewer.png)
+*F3 Row Viewer – paginated rows with quick structure info*
+
+![Row viewer fullscreen](docs/screenshots/row-viewer-fullscreen.png)
+*F3 Row Viewer fullscreen – cell expand on hover*
+
+![Structure editor](docs/screenshots/structure-editor.png)
+*F4 Structure Editor – column definitions, types, nullability, defaults*
+
+![Cross-connection copy](docs/screenshots/copy-table.png)
+*F5 Copy – batch copy across databases and connections*
+
+![SQL result](docs/screenshots/sql-result.png)
+*F2 SQL Editor – run arbitrary SQL, full-screen result viewer*
+
 ## Features
 
 - **Dual-panel layout** – each panel has its own independent connection, database, and cursor
