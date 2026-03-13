@@ -328,7 +328,7 @@
     display: none;
     position: fixed; inset: 0;
     background: rgba(0,0,0,0.4);
-    z-index: 100;
+    z-index: 800;
     align-items: center;
     justify-content: center;
   }
@@ -1069,13 +1069,6 @@
 </div>
 
 <!-- DIALOG -->
-<div id="dialog-overlay">
-  <div id="dialog-box">
-    <div id="dialog-title">Dialog</div>
-    <div id="dialog-body"></div>
-    <div id="dialog-buttons"></div>
-  </div>
-</div>
 
 <!-- QUICK VIEW -->
 <div id="quickview">
@@ -1129,8 +1122,8 @@
     <div class="fkey"><span class="fkey-num">4</span><span class="fkey-label">──</span></div>
     <div class="fkey"><span class="fkey-num">5</span><span class="fkey-label">──</span></div>
     <div class="fkey"><span class="fkey-num">6</span><span class="fkey-label">──</span></div>
-    <div class="fkey"><span class="fkey-num">7</span><span class="fkey-label">──</span></div>
-    <div class="fkey"><span class="fkey-num">8</span><span class="fkey-label">──</span></div>
+    <div class="fkey" id="se-fkey-add"><span class="fkey-num">7</span><span class="fkey-label">Add col</span></div>
+    <div class="fkey" id="se-fkey-drop"><span class="fkey-num">8</span><span class="fkey-label">Drop col</span></div>
     <div class="fkey"><span class="fkey-num">9</span><span class="fkey-label">──</span></div>
     <div class="fkey" id="se-fkey-close"><span class="fkey-num">10</span><span class="fkey-label">Close</span></div>
   </div>
@@ -1186,6 +1179,14 @@
     <div class="fkey"><span class="fkey-num">8</span><span class="fkey-label">──</span></div>
     <div class="fkey"><span class="fkey-num">9</span><span class="fkey-label">──</span></div>
     <div class="fkey" id="sqlresult-fkey-close"><span class="fkey-num">10</span><span class="fkey-label">Close</span></div>
+  </div>
+</div>
+
+<div id="dialog-overlay">
+  <div id="dialog-box">
+    <div id="dialog-title">Dialog</div>
+    <div id="dialog-body"></div>
+    <div id="dialog-buttons"></div>
   </div>
 </div>
 
@@ -1293,11 +1294,47 @@ $(function(){
       }
       return r.json();
     },
+    async createTable(db, name) {
+      const r = await apiFetch(`${API_BASE}/databases/${encodeURIComponent(db)}/tables`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+        throw new Error(err.error || `HTTP ${r.status}`);
+      }
+      return r.json();
+    },
     async createDatabase(name) {
       const r = await apiFetch(`${API_BASE}/databases`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+        throw new Error(err.error || `HTTP ${r.status}`);
+      }
+      return r.json();
+    },
+    async addColumn(db, table, column) {
+      const r = await apiFetch(`${API_BASE}/tables/${encodeURIComponent(db)}/${encodeURIComponent(table)}/structure`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'add', column }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+        throw new Error(err.error || `HTTP ${r.status}`);
+      }
+      return r.json();
+    },
+    async dropColumn(db, table, columnName) {
+      const r = await apiFetch(`${API_BASE}/tables/${encodeURIComponent(db)}/${encodeURIComponent(table)}/structure`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'drop', column: columnName }),
       });
       if (!r.ok) {
         const err = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
@@ -1874,12 +1911,13 @@ $(function(){
   });
 
   // ── STRUCTURE EDITOR ──────────────────────────────────────
-  let se = { db: null, table: null, columns: [], cursor: 0 };
+  let se = { db: null, table: null, columns: [], original: [], dirty: new Set(), pendingDrops: [], cursor: 0, side: 'left' };
 
   async function openStructEdit(db, table, target) {
     se.db     = db;
     se.table  = table;
-    se.cursor = 0;
+    se.cursor = -1;
+    se.side   = state.active;
     se._cleanup = placeOverlay($('#structedit'), target || 'active');
 
     const isPanelMode = (target || 'active') === 'other';
@@ -1893,7 +1931,10 @@ $(function(){
     try {
       const data = await Api.getStructure(db, table);
       structureCache[`${db}.${table}`] = data;
-      se.columns = data.columns.map(c => ({ ...c }));
+      se.columns      = data.columns.map(c => ({ ...c }));
+      se.original     = data.columns.map(c => ({ ...c }));
+      se.dirty        = new Set();
+      se.pendingDrops = [];
       seRender();
     } catch (err) {
       $('#structedit-status').text('Error: ' + err.message);
@@ -1916,22 +1957,27 @@ $(function(){
       // Type – editable when cursor is on row
       if (isCursor) {
         $('<input>').addClass('se-input se-input-type').attr({ 'data-field': 'full_type', autocomplete: 'off', spellcheck: 'false' })
-          .val(col.full_type).appendTo($row);
+          .val(col.full_type).on('input', () => seMarkDirtyFromInputs()).appendTo($row);
       } else {
         $('<span>').addClass('se-col-type').text(col.full_type).appendTo($row);
       }
 
-      // NULL checkbox
+      // NULL indicator – checkbox only on cursor row, text indicator otherwise
       const $nullWrap = $('<span>').addClass('se-col-null').appendTo($row);
-      $('<input type="checkbox">').addClass('se-checkbox').attr('data-field', 'nullable')
-        .prop('checked', col.nullable)
-        .prop('disabled', isPk)
-        .appendTo($nullWrap);
+      if (isCursor) {
+        $('<input type="checkbox">').addClass('se-checkbox').attr('data-field', 'nullable')
+          .prop('checked', col.nullable)
+          .prop('disabled', isPk)
+          .on('change', () => seMarkDirtyFromInputs())
+          .appendTo($nullWrap);
+      } else {
+        $('<span>').text(col.nullable ? '✓' : '').appendTo($nullWrap);
+      }
 
       // Default – editable when cursor is on row
       if (isCursor) {
         $('<input>').addClass('se-input se-input-default').attr({ 'data-field': 'default', autocomplete: 'off', spellcheck: 'false', placeholder: 'NULL' })
-          .val(col.default ?? '').appendTo($row);
+          .val(col.default ?? '').on('input', () => seMarkDirtyFromInputs()).appendTo($row);
       } else {
         $('<span>').addClass('se-col-default').text(col.default ?? '').appendTo($row);
       }
@@ -1939,7 +1985,7 @@ $(function(){
       // Comment – editable when cursor is on row
       if (isCursor) {
         $('<input>').addClass('se-input se-input-comment').attr({ 'data-field': 'comment', autocomplete: 'off', spellcheck: 'false' })
-          .val(col.comment ?? '').appendTo($row);
+          .val(col.comment ?? '').on('input', () => seMarkDirtyFromInputs()).appendTo($row);
       } else {
         $('<span>').addClass('se-col-comment').text(col.comment ?? '').appendTo($row);
       }
@@ -1966,7 +2012,33 @@ $(function(){
   }
 
   // Read changes from the cursor row
+  // Called on every input/checkbox change – marks cursor row dirty immediately
+  // so ESC (which reverts input values before keydown fires) doesn't lose the change
+  function seMarkDirtyFromInputs() {
+    if (se.cursor === -1) return;
+    const orig = se.original[se.cursor];
+    if (orig === null) return; // new column, already dirty
+    const $row = $('#structedit-body .se-cursor');
+    if (!$row.length) return;
+    // Read live values directly
+    const liveType     = $row.find('[data-field="full_type"]').val()  ?? se.columns[se.cursor].full_type;
+    const liveNullable = $row.find('[data-field="nullable"]').prop('checked') ?? se.columns[se.cursor].nullable;
+    const liveDefault  = $row.find('[data-field="default"]').val()    ?? '';
+    const liveComment  = $row.find('[data-field="comment"]').val()    ?? '';
+    if (
+      liveType     !== orig.full_type ||
+      liveNullable !== orig.nullable  ||
+      String(liveDefault) !== String(orig.default  ?? '') ||
+      String(liveComment) !== String(orig.comment  ?? '')
+    ) {
+      se.dirty.add(se.cursor);
+    } else {
+      se.dirty.delete(se.cursor);
+    }
+  }
+
   function seReadCurrentRow() {
+    if (se.cursor === -1) return;
     const $row = $('#structedit-body .se-cursor');
     if (!$row.length) return;
     const col = se.columns[se.cursor];
@@ -1978,20 +2050,51 @@ $(function(){
       const field = $(this).attr('data-field');
       if (field) col[field] = $(this).prop('checked');
     });
+    // Mark dirty if changed from original
+    const orig = se.original[se.cursor];
+    if (orig === null) return; // new column, already in dirty
+    if (orig && (
+      col.full_type !== orig.full_type ||
+      col.nullable  !== orig.nullable  ||
+      String(col.default  ?? '') !== String(orig.default  ?? '') ||
+      String(col.comment  ?? '') !== String(orig.comment  ?? '')
+    )) {
+      se.dirty.add(se.cursor);
+    } else {
+      se.dirty.delete(se.cursor);
+    }
   }
 
   async function seSaveRow() {
     seReadCurrentRow();
-    const col = se.columns[se.cursor];
-    if (!col) return;
+    if (se.dirty.size === 0 && se.pendingDrops.length === 0) {
+      $('#structedit-status').text('No changes to save.');
+      return;
+    }
 
+    activeApiSide = se.side;
     $('#structedit-status').text('Saving…');
     try {
-      await Api.modifyColumn(se.db, se.table, col);
-      // Invalidate cache
-      delete structureCache[`${se.db}.${se.table}`];
-      $('#structedit-status').text(`✓ ${col.name} saved`);
-      // Refresh panel in background
+      for (const colName of se.pendingDrops) {
+        await Api.dropColumn(se.db, se.table, colName);
+      }
+      for (const i of [...se.dirty]) {
+        const col = se.columns[i];
+        if (col._isNew) {
+          await Api.addColumn(se.db, se.table, col);
+        } else {
+          await Api.modifyColumn(se.db, se.table, col);
+        }
+      }
+      const data = await Api.getStructure(se.db, se.table);
+      structureCache[`${se.db}.${se.table}`] = data;
+      se.columns      = data.columns.map(c => ({ ...c }));
+      se.original     = data.columns.map(c => ({ ...c }));
+      se.dirty        = new Set();
+      se.pendingDrops = [];
+      se.cursor       = Math.min(se.cursor, se.columns.length - 1);
+      seRender();
+      $('#structedit-status').text('✓ Saved');
       loadStructureCache(se.db, se.table);
     } catch (err) {
       $('#structedit-status').text('Error: ' + err.message);
@@ -1999,14 +2102,107 @@ $(function(){
   }
 
   function seClose() {
-    seReadCurrentRow();
-    $('#structedit').removeClass('visible');
-    if (se._cleanup) { se._cleanup(); se._cleanup = null; }
-    updateQuickView();
+    function doClose() {
+      $('#structedit').removeClass('visible');
+      if (se._cleanup) { se._cleanup(); se._cleanup = null; }
+      updateQuickView();
+    }
+
+    const hasChanges = se.dirty.size > 0 || se.pendingDrops.length > 0;
+    if (!hasChanges) {
+      seReadCurrentRow();
+      doClose();
+      return;
+    }
+
+    $('#dialog-title').text('Unsaved changes');
+    $('#dialog-body').html('You have unsaved changes. Save before closing?');
+    const $btns = $('#dialog-buttons').empty();
+
+    $('<button class="dialog-btn">').text('Save').on('click', async () => {
+      closeDialog();
+      await seSaveRow();
+      doClose();
+    }).appendTo($btns);
+
+    $('<button class="dialog-btn secondary">').text('Discard').on('click', () => {
+      closeDialog();
+      doClose();
+    }).appendTo($btns);
+
+    $('<button class="dialog-btn secondary">').text('Cancel').on('click', closeDialog).appendTo($btns);
+
+    $('#dialog-overlay').addClass('visible');
+    $btns.find('button').first().focus();
   }
 
   $('#se-fkey-save').on('click', seSaveRow);
+  $('#se-fkey-add').on('click', seAddColumn);
+  $('#se-fkey-drop').on('click', seDropColumn);
   $('#se-fkey-close').on('click', seClose);
+
+  function seAddColumn() {
+    const $input = $('<input type="text" class="dialog-input">').attr('placeholder', 'column_name');
+    const $type  = $('<input type="text" class="dialog-input" style="margin-top:6px">').attr({ placeholder: 'varchar(255)', value: 'varchar(255)' });
+    const $body  = $('<div>').append(
+      $('<div style="color:var(--nc-fg);margin-bottom:6px">').text('Column name:'),
+      $input,
+      $('<div style="color:var(--nc-fg);margin:8px 0 6px">').text('Type:'),
+      $type,
+    );
+    showDialog('F7 Add Column', $body[0].outerHTML, ['Add', 'Cancel'], () => {
+      const name     = $('#dialog-overlay input.dialog-input').eq(0).val().trim();
+      const fullType = $('#dialog-overlay input.dialog-input').eq(1).val().trim() || 'varchar(255)';
+      if (!name) return;
+      // Draft only – saved on F2
+      const newCol = { name, full_type: fullType, nullable: true, default: null, comment: '', key: '', extra: '', position: se.columns.length + 1, _isNew: true };
+      se.columns.push(newCol);
+      se.original.push(null);
+      const newIdx = se.columns.length - 1;
+      se.dirty.add(newIdx);
+      se.cursor = newIdx;
+      seRender();
+      $('#structedit-status').text(`${name} added – press F2 to save`);
+    });
+    setTimeout(() => {
+      const $inp = $('#dialog-overlay input.dialog-input').first().focus();
+      $inp.on('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); $('#dialog-buttons button:first').click(); }
+      });
+    }, 50);
+  }
+
+  function seDropColumn() {
+    const col = se.columns[se.cursor];
+    if (!col || se.cursor === -1) return;
+    if (col.key === 'PRI') {
+      showDialog('⚠ Cannot Drop', `<span style="color:var(--nc-yellow)">Primary key columns cannot be dropped here.</span>`, ['OK']);
+      return;
+    }
+    const safeName = $('<div>').text(col.name).html();
+    showDialog('⚠ Drop Column',
+      `Drop column <span style="color:var(--nc-red);font-weight:bold">${safeName}</span>?<br><br>` +
+      `<span style="color:var(--nc-yellow)">This operation cannot be undone!</span>`,
+      ['Drop!', 'Cancel'],
+      () => {
+        const dropIdx = se.cursor;
+        const isNew   = !!col._isNew;
+        if (!isNew) se.pendingDrops.push(col.name);
+        se.columns.splice(dropIdx, 1);
+        se.original.splice(dropIdx, 1);
+        // Renumber dirty indices
+        const newDirty = new Set();
+        se.dirty.forEach(i => {
+          if (i === dropIdx) return;
+          newDirty.add(i > dropIdx ? i - 1 : i);
+        });
+        se.dirty  = newDirty;
+        se.cursor = Math.min(dropIdx, se.columns.length - 1);
+        seRender();
+        $('#structedit-status').text(`${col.name} removed – press F2 to save`);
+      }
+    );
+  }
 
   // Row click sets cursor
   $(document).on('click', '#structedit-body .se-row', function() {
@@ -2018,16 +2214,22 @@ $(function(){
   // Structure editor keyboard handler
   $(document).on('keydown', function(e) {
     if (!$('#structedit').hasClass('visible')) return;
+    if ($('#dialog-overlay').hasClass('visible')) return;
     // If an input is focused, Enter and Tab behave naturally
     const inInput = $(e.target).hasClass('se-input');
     switch (e.key) {
-      case 'Escape':
       case 'F10':
         e.preventDefault(); seClose(); break;
+      case 'Escape':
+        e.preventDefault(); seMarkDirtyFromInputs(); seClose(); break;
       case 'F2':
         e.preventDefault(); seSaveRow(); break;
+      case 'F7':
+        e.preventDefault(); seAddColumn(); break;
+      case 'F8':
+        e.preventDefault(); seDropColumn(); break;
       case 'ArrowUp':
-        if (!inInput) { e.preventDefault(); seReadCurrentRow(); se.cursor = Math.max(0, se.cursor - 1); seRender(); }
+        if (!inInput) { e.preventDefault(); seReadCurrentRow(); se.cursor = Math.max(0, se.cursor === -1 ? 0 : se.cursor - 1); seRender(); }
         break;
       case 'ArrowDown':
         if (!inInput) { e.preventDefault(); seReadCurrentRow(); se.cursor = Math.min(se.columns.length - 1, se.cursor + 1); seRender(); }
@@ -2817,7 +3019,37 @@ $(function(){
       }, 50);
 
     } else if (meta.level === 'tables') {
-      showDialog('F7 Create Table', `<span style="color:var(--nc-yellow)">Create Table is not yet implemented.</span>`, ['OK']);
+      const $input = $('<input type="text" class="dialog-input">').attr('placeholder', 'table_name');
+      const $body  = $('<div>').append(
+        $('<div style="color:var(--nc-fg);margin-bottom:8px">').text('Create new table in ' + meta.db + ':'),
+        $input
+      );
+
+      showDialog('F7 Create Table', $body[0].outerHTML, ['Create', 'Cancel'], async () => {
+        const name = $('#dialog-overlay input.dialog-input').val().trim();
+        if (!name) return;
+        activeApiSide = state.active;
+        try {
+          await Api.createTable(meta.db, name);
+          await loadTables(state.active, meta.db);
+          // Move cursor to new table, then open Structure Editor
+          const items = state.panels[state.active].data;
+          const idx   = items.findIndex(i => i.name === name);
+          if (idx >= 0) state.panels[state.active].cursor = idx;
+          renderPanel(state.active);
+          // Open Structure Editor so user can add columns immediately
+          openStructEdit(meta.db, name, 'active');
+        } catch(e) {
+          showDialog('✗ Create Failed', `<span style="color:var(--nc-red)">${$('<div>').text(e.message).html()}</span>`, ['OK']);
+        }
+      });
+
+      setTimeout(() => {
+        const $inp = $('#dialog-overlay input.dialog-input').focus();
+        $inp.on('keydown', function(e) {
+          if (e.key === 'Enter') { e.preventDefault(); $('#dialog-buttons button:first').click(); }
+        });
+      }, 50);
     }
   }
 
@@ -2917,7 +3149,7 @@ $(function(){
   }
 
   $(document).on('keydown', function(e) {
-    if (e.key === 'Escape' && $('#dialog-overlay').hasClass('visible')) closeDialog();
+    if (e.key === 'Escape' && $('#dialog-overlay').hasClass('visible') && !$('#structedit').hasClass('visible')) closeDialog();
   });
 
   // ── CLOCK ──────────────────────────────────────────────────

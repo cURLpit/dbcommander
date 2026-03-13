@@ -138,7 +138,8 @@ final class Application extends BaseApplication
                 $handler = match ($this->name) {
                     'DatabaseListHandler'   => new DatabaseListHandler(new DatabaseRepository($driver),   $this->rf, $this->sf),
                     'CreateDatabaseHandler' => new \DbCommander\Http\Handler\CreateDatabaseHandler($this->rf, $this->sf),
-                    'TableListHandler'    => new TableListHandler(new TableRepository($driver),          $this->rf, $this->sf),
+                    'TableListHandler'      => new TableListHandler(new TableRepository($driver),          $this->rf, $this->sf),
+                    'CreateTableHandler'    => new \DbCommander\Http\Handler\CreateTableHandler($this->rf, $this->sf),
                     'RowListHandler'      => new RowListHandler(new RowRepository($driver),              $this->rf, $this->sf),
                     'StructureHandler'    => new StructureHandler(new StructureRepository($driver),      $this->rf, $this->sf),
                     'SqlHandler'          => new SqlHandler($driver,                                     $this->rf, $this->sf),

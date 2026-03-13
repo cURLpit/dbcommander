@@ -14,17 +14,10 @@ use Psr\Http\Server\RequestHandlerInterface;
 /**
  * PUT /api/tables/{db}/{table}/structure
  *
- * Body: {
- *   "column": {
- *     "name":      "email",
- *     "full_type": "varchar(255)",
- *     "nullable":  false,
- *     "default":   null,
- *     "comment":   ""
- *   }
- * }
- *
- * Returns: { "ok": true }
+ * Body:
+ *   action=modify (default): { "column": { "name", "full_type", "nullable", "default", "comment" } }
+ *   action=add:              { "action": "add",  "column": { "name", "full_type", "nullable", "default", "comment" } }
+ *   action=drop:             { "action": "drop", "column": "column_name" }
  */
 final class ModifyColumnHandler implements RequestHandlerInterface
 {
@@ -38,17 +31,33 @@ final class ModifyColumnHandler implements RequestHandlerInterface
 
     public function handle(ServerRequestInterface $request): ResponseInterface
     {
-        $db     = $request->getAttribute('db',    '');
-        $table  = $request->getAttribute('table', '');
-        $body   = json_decode((string) $request->getBody(), true);
-        $column = $body['column'] ?? null;
+        $db    = $request->getAttribute('db',    '');
+        $table = $request->getAttribute('table', '');
+        $body  = json_decode((string) $request->getBody(), true) ?? [];
 
-        if (!is_array($column) || empty($column['name']) || empty($column['full_type'])) {
-            return $this->json(['error' => 'Invalid request body'], 400);
-        }
+        $action = $body['action'] ?? 'modify';
 
         try {
-            $this->repository->modifyColumn($db, $table, $column);
+            if ($action === 'drop') {
+                $colName = $body['column'] ?? '';
+                if (empty($colName)) {
+                    return $this->json(['error' => 'Column name is required for drop'], 400);
+                }
+                $this->repository->dropColumn($db, $table, $colName);
+                return $this->json(['ok' => true]);
+            }
+
+            $column = $body['column'] ?? null;
+            if (!is_array($column) || empty($column['name']) || empty($column['full_type'])) {
+                return $this->json(['error' => 'Invalid request body'], 400);
+            }
+
+            if ($action === 'add') {
+                $this->repository->addColumn($db, $table, $column);
+            } else {
+                $this->repository->modifyColumn($db, $table, $column);
+            }
+
             return $this->json(['ok' => true]);
         } catch (\Throwable $e) {
             return $this->json(['error' => $e->getMessage()], 400);

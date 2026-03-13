@@ -13,12 +13,6 @@
     "nyholm/psr7-server": "^1.1",
     "curlpit/curlpit": "^1.0"
   },
-  "repositories": [
-    {
-      "type": "path",
-      "url": "../curlpit-repo"
-    }
-  ],
   "autoload": {
     "psr-4": {
       "DbCommander\\": "src/DbCommander/",

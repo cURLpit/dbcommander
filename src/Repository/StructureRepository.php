@@ -164,18 +164,57 @@ final class StructureRepository
         $tbl = $this->driver->quoteIdentifier($table);
         $col = $this->driver->quoteIdentifier($column['name']);
 
-        $def = $column['full_type'];
+        $def = $this->buildColumnDef($column);
+        $sql = "ALTER TABLE {$db}.{$tbl} MODIFY COLUMN {$col} {$def}";
+        $this->driver->execute($sql);
+    }
+
+    /**
+     * Add a new column to a table.
+     * Builds: ALTER TABLE `db`.`table` ADD COLUMN `col` <full_type> [NOT NULL] [DEFAULT x] [COMMENT '...']
+     */
+    public function addColumn(string $database, string $table, array $column): void
+    {
+        $this->assertTableExists($database, $table);
+
+        $db  = $this->driver->quoteIdentifier($database);
+        $tbl = $this->driver->quoteIdentifier($table);
+        $col = $this->driver->quoteIdentifier($column['name']);
+
+        $def = $this->buildColumnDef($column);
+        $sql = "ALTER TABLE {$db}.{$tbl} ADD COLUMN {$col} {$def}";
+        $this->driver->execute($sql);
+    }
+
+    /**
+     * Drop a column from a table.
+     * Builds: ALTER TABLE `db`.`table` DROP COLUMN `col`
+     */
+    public function dropColumn(string $database, string $table, string $columnName): void
+    {
+        $this->assertTableExists($database, $table);
+
+        $db  = $this->driver->quoteIdentifier($database);
+        $tbl = $this->driver->quoteIdentifier($table);
+        $col = $this->driver->quoteIdentifier($columnName);
+
+        $this->driver->execute("ALTER TABLE {$db}.{$tbl} DROP COLUMN {$col}");
+    }
+
+    // ── private ──────────────────────────────────────────────
+
+    private function buildColumnDef(array $column): string
+    {
+        $def  = $column['full_type'];
         $def .= $column['nullable'] ? ' NULL' : ' NOT NULL';
 
-        if ($column['default'] !== null && $column['default'] !== '') {
-            // Numeric types get unquoted defaults, others quoted
+        if (isset($column['default']) && $column['default'] !== null && $column['default'] !== '') {
             $numericTypes = ['int','bigint','tinyint','smallint','mediumint','float','double','decimal'];
             $dataType = strtolower(preg_replace('/\(.*/', '', $column['full_type']));
-            $isNumeric = in_array($dataType, $numericTypes, true);
-            $def .= $isNumeric
+            $def .= in_array($dataType, $numericTypes, true)
                 ? ' DEFAULT ' . $column['default']
                 : " DEFAULT '" . addslashes($column['default']) . "'";
-        } elseif ($column['nullable']) {
+        } elseif ($column['nullable'] ?? true) {
             $def .= ' DEFAULT NULL';
         }
 
@@ -183,11 +222,8 @@ final class StructureRepository
             $def .= " COMMENT '" . addslashes($column['comment']) . "'";
         }
 
-        $sql = "ALTER TABLE {$db}.{$tbl} MODIFY COLUMN {$col} {$def}";
-        $this->driver->execute($sql);
+        return $def;
     }
-
-    // ── private ──────────────────────────────────────────────
 
     private function assertTableExists(string $database, string $table): void
     {
