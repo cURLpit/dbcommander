@@ -7,15 +7,12 @@ namespace DbCommander;
 use Curlpit\App\Application as BaseApplication;
 use Curlpit\Core\ConfigLoader;
 use Curlpit\Core\Middleware\DispatchMiddleware;
-use Curlpit\Core\Middleware\JumpMiddleware;
 use Curlpit\Core\Middleware\RoutingMiddleware;
-use Curlpit\Core\Middleware\SetVariableMiddleware;
 use DbCommander\Config\ConnectionConfig;
 use DbCommander\Http\Handler\ConnectionListHandler;
-use DbCommander\Http\Handler\CopyTableHandler;
 use DbCommander\Http\Handler\DatabaseListHandler;
-use DbCommander\Http\Handler\FrontendHandler;
 use DbCommander\Http\Handler\DropTableHandler;
+use DbCommander\Http\Handler\FrontendHandler;
 use DbCommander\Http\Handler\ModifyColumnHandler;
 use DbCommander\Http\Handler\RowListHandler;
 use DbCommander\Http\Handler\SqlHandler;
@@ -23,6 +20,10 @@ use DbCommander\Http\Handler\StructureHandler;
 use DbCommander\Http\Handler\TableListHandler;
 use DbCommander\Http\Handler\UpdateRowHandler;
 use DbCommander\Http\Middleware\ConnectionMiddleware;
+use DbCommander\Http\Middleware\CopyPrepareMiddleware;
+use DbCommander\Http\Middleware\CopyResponseMiddleware;
+use DbCommander\Http\Middleware\TableCopySourceMiddleware;
+use DbCommander\Http\Middleware\TableCopyTargetMiddleware;
 use DbCommander\Repository\DatabaseRepository;
 use DbCommander\Repository\RowRepository;
 use DbCommander\Repository\StructureRepository;
@@ -85,34 +86,39 @@ final class Application extends BaseApplication
                     $rf, $sf,
                 ),
 
+            \DbCommander\Http\Middleware\CopyPrepareMiddleware::class =>
+                new CopyPrepareMiddleware($rf, $sf),
+
+            \DbCommander\Http\Middleware\CopyResponseMiddleware::class =>
+                new CopyResponseMiddleware($rf, $sf),
+
+            \DbCommander\Http\Middleware\TableCopySourceMiddleware::class =>
+                new TableCopySourceMiddleware(),
+
+            \DbCommander\Http\Middleware\TableCopyTargetMiddleware::class =>
+                new TableCopyTargetMiddleware(),
+
             default => parent::instantiate($class, $options),
         };
     }
 
     // ── Handler resolver ─────────────────────────────────────
-    // A driver a request attribútumból jön – minden request
-    // saját connection-öt hordoz, nincs shared state.
 
     private function resolve(string $shortName): RequestHandlerInterface
     {
         $rf = $this->responseFactory;
         $sf = $this->streamFactory;
 
-        // Handlerek amik nem igényelnek drivert
         if ($shortName === 'ConnectionListHandler') {
             return new ConnectionListHandler($this->config, $rf, $sf);
         }
         if ($shortName === 'FrontendHandler') {
             return new FrontendHandler($rf, $sf, dirname(__DIR__, 2) . '/resources/app.html');
         }
-        if ($shortName === 'CopyTableHandler') {
-            return new CopyTableHandler($rf, $sf);
-        }
 
-        // Minden más handler requestből olvassa a drivert
         return new class($shortName, $rf, $sf) implements RequestHandlerInterface {
             public function __construct(
-                private readonly string                  $name,
+                private readonly string                   $name,
                 private readonly ResponseFactoryInterface $rf,
                 private readonly StreamFactoryInterface   $sf,
             ) {}
@@ -129,20 +135,15 @@ final class Application extends BaseApplication
                         ->withBody($body);
                 }
 
-                $dbRepo    = fn() => new DatabaseRepository($driver);
-                $tableRepo = fn() => new TableRepository($driver);
-                $rowRepo   = fn() => new RowRepository($driver);
-                $strRepo   = fn() => new StructureRepository($driver);
-
                 $handler = match ($this->name) {
-                    'DatabaseListHandler' => new DatabaseListHandler($dbRepo(),   $this->rf, $this->sf),
-                    'TableListHandler'    => new TableListHandler($tableRepo(),    $this->rf, $this->sf),
-                    'RowListHandler'      => new RowListHandler($rowRepo(),        $this->rf, $this->sf),
-                    'StructureHandler'    => new StructureHandler($strRepo(),      $this->rf, $this->sf),
-                    'SqlHandler'          => new SqlHandler($driver,               $this->rf, $this->sf),
-                    'UpdateRowHandler'    => new UpdateRowHandler($rowRepo(),      $this->rf, $this->sf),
-                    'ModifyColumnHandler' => new ModifyColumnHandler($strRepo(),   $this->rf, $this->sf),
-                    'DropTableHandler'    => new DropTableHandler($driver,         $this->rf, $this->sf),
+                    'DatabaseListHandler' => new DatabaseListHandler(new DatabaseRepository($driver),   $this->rf, $this->sf),
+                    'TableListHandler'    => new TableListHandler(new TableRepository($driver),          $this->rf, $this->sf),
+                    'RowListHandler'      => new RowListHandler(new RowRepository($driver),              $this->rf, $this->sf),
+                    'StructureHandler'    => new StructureHandler(new StructureRepository($driver),      $this->rf, $this->sf),
+                    'SqlHandler'          => new SqlHandler($driver,                                     $this->rf, $this->sf),
+                    'UpdateRowHandler'    => new UpdateRowHandler(new RowRepository($driver),            $this->rf, $this->sf),
+                    'ModifyColumnHandler' => new ModifyColumnHandler(new StructureRepository($driver),   $this->rf, $this->sf),
+                    'DropTableHandler'    => new DropTableHandler($driver,                               $this->rf, $this->sf),
                     default               => throw new \RuntimeException("Unknown handler: {$this->name}"),
                 };
 

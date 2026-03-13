@@ -42,7 +42,7 @@ final class SqlHandler implements RequestHandlerInterface
             return $this->json(['error' => 'No SQL provided'], 400);
         }
 
-        // Opcionálisan váltsunk DB-t
+        // Optionally switch database context
         if ($db !== '') {
             try {
                 $this->driver->execute('USE ' . $this->quoteIdentifier($db));

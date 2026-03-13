@@ -816,7 +816,7 @@
   .se-col-default{ flex: 1; color: #5599aa; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .se-col-comment{ width: 180px; color: #666; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
 
-  /* inline edit mezők */
+  /* inline edit fields */
   .se-input {
     background: #001a4a;
     border: 1px solid var(--nc-cyan);
@@ -1183,10 +1183,10 @@ $(function(){
   // ── API CLIENT ─────────────────────────────────────────────
   const API_BASE = '/api';
 
-  // Aktív panel connection neve – minden API híváshoz X-Connection headerként megy
-  // Ha null, a szerver a default connectiont használja
+  // Active panel connection name – sent as X-Connection header with every API call
+  // If null, the server uses the default connection
   let panelConnection = { left: null, right: null };
-  let activeApiSide   = 'left'; // melyik panel nevében fut az aktuális API hívás
+  let activeApiSide   = 'left'; // which panel the current API call is made on behalf of
 
   function apiFetch(url, options = {}) {
     const conn = panelConnection[activeApiSide];
@@ -1430,14 +1430,14 @@ $(function(){
     const filterStr = p.filter.toLowerCase();
     let data = sortedData(p, meta);
 
-    // Filter alkalmazása (parent mindig látszik)
+    // Apply filter (parent entry always visible)
     if (filterStr && meta.level === 'tables') {
       data = data.filter(item => item.type === 'parent' || item.name.toLowerCase().includes(filterStr));
     }
 
     const $list = $(`#list-${side}`).empty();
 
-    // Filter bar megjelenítése
+    // Show filter bar
     const $fb = $(`#filter-${side}`);
     if (p.filter && meta.level === 'tables') {
       $fb.addClass('visible');
@@ -1447,7 +1447,7 @@ $(function(){
       $fb.removeClass('visible');
     }
 
-    // Colheader sort jelölők
+    // Column header sort indicators
     const $hdr = $(`#colheader-${side}`);
     $hdr.find('[data-sort]').removeClass('sort-asc sort-desc');
     if (meta.level === 'tables') {
@@ -1569,16 +1569,16 @@ $(function(){
 
   // ── KEYBOARD ───────────────────────────────────────────────
   $(document).on('keydown', function(e) {
-    // Ha a row viewer nyitva van, annak handlere kezeli (kivéve panel-módban, ott a másik panel aktív marad)
+    // If row viewer is open, its handler takes over (except in panel mode, where the other panel stays active)
     if ($('#rowviewer').hasClass('visible') && !$('#rowviewer').hasClass('panel-mode')) return;
-    // Ha a struktúra editor nyitva van, annak handlere kezeli
+    // If structure editor is open, its handler takes over
     if ($('#structedit').hasClass('visible') && !$('#structedit').hasClass('panel-mode')) return;
     // Ha SQL result viewer nyitva van
     if ($('#sqlresult').hasClass('visible')) {
       if (e.key === 'Escape' || e.key === 'F10') { e.preventDefault(); closeSqlResult(); }
       return;
     }
-    // Ha dialog nyitva van, csak ESC-t kezeljük
+    // If a dialog is open, handle ESC only
     if ($('#dialog-overlay').hasClass('visible')) {
       if (e.key === 'Escape') closeDialog();
       return;
@@ -1598,7 +1598,7 @@ $(function(){
       return;
     }
 
-    // Quick filter – tables szinten bármilyen betű/szám aktivál
+    // Quick filter – any letter or digit triggers it at table level
     const meta = panelMeta[state.active];
     if (meta.level === 'tables' && e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
       const p = state.panels[state.active];
@@ -1621,7 +1621,7 @@ $(function(){
       case 'Insert':     e.preventDefault(); toggleSelect(); break;
       case ' ':          e.preventDefault(); toggleSelect(); break;
       case 'Escape':
-        // Filter törlése ha aktív
+        // Clear filter if active
         if (state.panels[state.active].filter) {
           state.panels[state.active].filter = '';
           $(`#filter-input-${state.active}`).val('');
@@ -1631,7 +1631,7 @@ $(function(){
         break;
       case 'Enter':
         e.preventDefault();
-        // Ha filter aktív és csak 1 match van, lép be arra
+        // If filter is active and only 1 match, navigate into it
         if (state.panels[state.active].filter) {
           const fp = state.panels[state.active];
           const fmeta = panelMeta[state.active];
@@ -1706,14 +1706,14 @@ $(function(){
     if (meta.level === 'databases' && item.type === 'db') {
       loadTables(state.active, item.name);
     } else if (meta.level === 'tables' && (item.type === 'TABLE' || item.type === 'VIEW')) {
-      // Enter = quick view toggle (nem row viewer – arra F3 vagy dblclick)
+      // Enter = quick view toggle (not row viewer – use F3 or dblclick for that)
       showQuickView(meta.db, item.name);
     }
   }
 
   function renderQuickView(table, itemMeta, structData) {
-    // itemMeta: {rows, engine, type} – a panel listából
-    // structData: {columns, indexes, foreign_keys} – a structure cache-ből
+    // itemMeta: {rows, engine, type} – from the panel list
+    // structData: {columns, indexes, foreign_keys} – from the structure cache
     const cols    = structData.columns     || [];
     const idxs    = structData.indexes     || [];
     const fks     = structData.foreign_keys|| [];
@@ -1759,7 +1759,7 @@ $(function(){
   }
 
   function showQuickView(db, table) {
-    // Lekérjük az item metaadatát a panel listából (rows, engine, type)
+    // Fetch item metadata from the panel list (rows, engine, type)
     const p    = state.panels[state.active];
     const meta = panelMeta[state.active];
     const item = p.data.find(i => i.name === table) || {};
@@ -1768,7 +1768,7 @@ $(function(){
     if (structureCache[key]) {
       renderQuickView(table, item, structureCache[key]);
     } else {
-      // Azonnal mutatjuk amit tudunk, majd frissítjük
+      // Show what we know immediately, then refresh
       $('#qv-title').text(table);
       $('#qv-meta').text('loading…');
       $('#qv-stats').empty();
@@ -1818,7 +1818,7 @@ $(function(){
     const idx  = parseInt($(this).attr('data-idx'));
     const now  = Date.now();
 
-    // Panel váltás
+    // Panel toggle
     if (side !== state.active) { state.active = side; }
     state.panels[side].cursor = idx;
     renderAll();
@@ -1835,7 +1835,7 @@ $(function(){
     const isDbl = lastClick.side === side && lastClick.idx === idx && (now - lastClick.time) < 400;
     lastClick = { side, idx, time: now };
     if (isDbl) {
-      lastClick.time = 0; // reset hogy ne triggerelődjön harmadszorra
+      lastClick.time = 0; // reset so it does not trigger a third time
       const meta = panelMeta[side];
       const item = state.panels[side].data[idx];
       if (!item) return;
@@ -1889,7 +1889,7 @@ $(function(){
       $('<span>').addClass('se-col-num').text(col.position).appendTo($row);
       $('<span>').addClass('se-col-name' + (isPk ? ' se-pk' : '')).text((isPk ? '🔑 ' : '') + col.name).appendTo($row);
 
-      // Type – szerkeszthető ha cursor
+      // Type – editable when cursor is on row
       if (isCursor) {
         $('<input>').addClass('se-input se-input-type').attr({ 'data-field': 'full_type', autocomplete: 'off', spellcheck: 'false' })
           .val(col.full_type).appendTo($row);
@@ -1904,7 +1904,7 @@ $(function(){
         .prop('disabled', isPk)
         .appendTo($nullWrap);
 
-      // Default – szerkeszthető ha cursor
+      // Default – editable when cursor is on row
       if (isCursor) {
         $('<input>').addClass('se-input se-input-default').attr({ 'data-field': 'default', autocomplete: 'off', spellcheck: 'false', placeholder: 'NULL' })
           .val(col.default ?? '').appendTo($row);
@@ -1912,7 +1912,7 @@ $(function(){
         $('<span>').addClass('se-col-default').text(col.default ?? '').appendTo($row);
       }
 
-      // Comment – szerkeszthető ha cursor
+      // Comment – editable when cursor is on row
       if (isCursor) {
         $('<input>').addClass('se-input se-input-comment').attr({ 'data-field': 'comment', autocomplete: 'off', spellcheck: 'false' })
           .val(col.comment ?? '').appendTo($row);
@@ -1937,11 +1937,11 @@ $(function(){
     $('#structedit-info').text(`${se.columns.length} columns`);
     $('#structedit-status').text('');
 
-    // Fókusz az első input mezőre ha cursor
+    // Focus first input field when cursor is on row
     $body.find('.se-cursor .se-input').first().focus();
   }
 
-  // Változások kiolvasása a cursor sorából
+  // Read changes from the cursor row
   function seReadCurrentRow() {
     const $row = $('#structedit-body .se-cursor');
     if (!$row.length) return;
@@ -1964,10 +1964,10 @@ $(function(){
     $('#structedit-status').text('Saving…');
     try {
       await Api.modifyColumn(se.db, se.table, col);
-      // Cache invalidálása
+      // Invalidate cache
       delete structureCache[`${se.db}.${se.table}`];
       $('#structedit-status').text(`✓ ${col.name} saved`);
-      // Panel frissítése háttérben
+      // Refresh panel in background
       loadStructureCache(se.db, se.table);
     } catch (err) {
       $('#structedit-status').text('Error: ' + err.message);
@@ -1984,17 +1984,17 @@ $(function(){
   $('#se-fkey-save').on('click', seSaveRow);
   $('#se-fkey-close').on('click', seClose);
 
-  // Sor kattintásra cursor
+  // Row click sets cursor
   $(document).on('click', '#structedit-body .se-row', function() {
     seReadCurrentRow();
     se.cursor = parseInt($(this).attr('data-ci'));
     seRender();
   });
 
-  // Struktúra editor keyboard
+  // Structure editor keyboard handler
   $(document).on('keydown', function(e) {
     if (!$('#structedit').hasClass('visible')) return;
-    // Ha egy input van fókuszban, Enter és Tab természetes
+    // If an input is focused, Enter and Tab behave naturally
     const inInput = $(e.target).hasClass('se-input');
     switch (e.key) {
       case 'Escape':
@@ -2009,7 +2009,7 @@ $(function(){
         if (!inInput) { e.preventDefault(); seReadCurrentRow(); se.cursor = Math.min(se.columns.length - 1, se.cursor + 1); seRender(); }
         break;
       case 'Enter':
-        if (!inInput) { e.preventDefault(); seRender(); } // refresh = fókusz az inputra
+        if (!inInput) { e.preventDefault(); seRender(); } // refresh = focus the input
         break;
     }
   });
@@ -2021,11 +2021,11 @@ $(function(){
     if (isNull) { hideCellPopup(); return; }
 
     const display = full || $(this).text();
-    // Csak akkor mutatja ha van mit mutatni (csonkított vagy hosszú)
+    // Only show tooltip if there is something to show (truncated or long value)
     $('#cell-popup-label').text(col + ':');
     $('#cell-popup-value').text(display);
 
-    // Pozicionálás – az egér mellé
+    // Position tooltip next to the cursor
     const pw = 500, ph = 200;
     let left = e.clientX + 8;
     let top  = e.clientY + 8;
@@ -2034,7 +2034,7 @@ $(function(){
     $('#cell-popup').css({ left, top }).addClass('visible');
   });
 
-  // SQLresult cellák is
+  // SQL result cells too
   $(document).on('click', '.sqr-cell', function(e) {
     e.stopPropagation();
     const col  = $(this).data('col');
@@ -2097,7 +2097,7 @@ $(function(){
       return;
     }
 
-    // Oszlopszélességek kiszámítása
+    // Calculate column widths
     const colWidths = cols.map(c => Math.min(40, Math.max(c.length, 8)));
     rows.slice(0, 200).forEach(row => {
       cols.forEach((col, ci) => {
@@ -2170,7 +2170,7 @@ $(function(){
       p.sortDir = p.sortDir === 'asc' ? 'desc' : 'asc';
     } else {
       p.sortBy  = sortBy;
-      p.sortDir = sortBy === 'modified' ? 'desc' : 'asc'; // date: legújabb elöl alapból
+      p.sortDir = sortBy === 'modified' ? 'desc' : 'asc'; // date: newest first by default
     }
     state.active = side;
     renderAll();
@@ -2211,7 +2211,7 @@ $(function(){
 
   // ── OVERLAY PLACEMENT HELPER ───────────────────────────────
   // target: 'active' | 'other'
-  // Visszaad egy cleanup függvényt amit close-kor kell hívni
+  // Returns a cleanup function to call on close
   function placeOverlay($overlay, target) {
     const otherSide = state.active === 'left' ? 'right' : 'left';
     const targetSide = target === 'other' ? otherSide : state.active;
@@ -2469,7 +2469,7 @@ $(function(){
     er.db    = rv.db;
     er.table = rv.table;
 
-    // Struktúra kell a PK és típus infókhoz
+    // Structure needed for PK and type info
     const key = `${rv.db}.${rv.table}`;
     let structure = structureCache[key];
     if (!structure) {
@@ -2479,7 +2479,7 @@ $(function(){
     er.pkCols      = er.columns.filter(c => c.key === 'PRI').map(c => c.name);
     er.originalRow = row;
 
-    // Ha nincs PK, az összes oszlop lesz WHERE – figyelmeztetés
+    // If no PK, all columns become WHERE – show warning
     const hasPk = er.pkCols.length > 0;
 
     // Form build
@@ -2500,7 +2500,7 @@ $(function(){
       $body.append($field);
     });
 
-    // Fókusz az első nem-PK mezőre
+    // Focus first non-PK field
     $('#editrow-body .er-input:not([readonly])').first().focus();
 
     $('#editrow-title').text(`Edit: ${rv.db} › ${rv.table}`);
@@ -2513,7 +2513,7 @@ $(function(){
     const set   = {};
     const where = {};
 
-    // WHERE: PK értékek (vagy ha nincs PK, az eredeti összes érték)
+    // WHERE: PK values (or all original values if no PK)
     const whereKeys = er.pkCols.length > 0 ? er.pkCols : er.columns.map(c => c.name);
     whereKeys.forEach(colName => {
       const val = Array.isArray(er.originalRow)
@@ -2522,7 +2522,7 @@ $(function(){
       where[colName] = val;
     });
 
-    // SET: megváltozott, nem-PK mezők
+    // SET: changed, non-PK fields
     let changed = 0;
     $('#editrow-body .er-input:not([readonly])').each(function() {
       const col      = $(this).attr('data-col');
@@ -2547,7 +2547,7 @@ $(function(){
         $('#editrow-status').text('⚠ No rows affected – row may have changed');
       } else {
         closeEditRow();
-        // Frissítjük az aktuális sort a row viewerben
+        // Update the current row in the row viewer
         rv.offset = 0;
         rvLoadPage(false);
       }
@@ -2668,7 +2668,7 @@ $(function(){
       return s;
     }
 
-    // A dialog-on belüli gombok
+    // Buttons inside the dialog
     $(document).one('click', '#exp-csv',  () => runExport('csv'));
     $(document).one('click', '#exp-json', () => runExport('json'));
     $(document).one('click', '#exp-sql',  () => runExport('sql'));
@@ -2781,7 +2781,7 @@ $(function(){
       async () => {
         try {
           await Api.dropTable(meta.db, item.name, objType);
-          // Panel frissítése
+          // Refresh panel
           loadTables(state.active, meta.db);
         } catch (err) {
           showDialog('Error', `<span style="color:var(--nc-red)">${$('<div>').text(err.message).html()}</span>`, ['OK']);
@@ -2865,7 +2865,7 @@ $(function(){
   $('#menu-left-conn').on('click',  () => openConnPicker('left'));
   $('#menu-right-conn').on('click', () => openConnPicker('right'));
 
-  // Panel title kattintásra is
+  // Panel title click handler
   $(document).on('click', '.panel-title', function() {
     const side = $(this).closest('.panel').attr('id').replace('panel-', '');
     openConnPicker(side);
@@ -2946,7 +2946,7 @@ $(function(){
     try {
       const data    = cp.connections.length ? { connections: cp.connections } : await Api.getConnections();
       cp.connections = data.connections;
-      // Cursor az aktuális connectionre
+      // Set cursor to the current connection
       const current = panelConnection[side];
       const idx     = cp.connections.findIndex(c => c.name === current);
       cp.cursor     = idx >= 0 ? idx : cp.connections.findIndex(c => c.default) || 0;
@@ -2997,17 +2997,30 @@ $(function(){
   });
 
   // ── INIT ───────────────────────────────────────────────────
+  // ── Browser back button → ESC ────────────────────────────
+  // Push a dummy state on load so the back button has somewhere to go.
+  // When popstate fires (back pressed), simulate ESC to close the topmost layer.
+  history.pushState({ dbcommander: true }, '');
+
+  window.addEventListener('popstate', function () {
+    // Re-push so the back button is always available
+    history.pushState({ dbcommander: true }, '');
+    // Simulate ESC on the document
+    $(document).trigger($.Event('keydown', { key: 'Escape', keyCode: 27, which: 27, bubbles: true }));
+  });
+
+  // ── Init ─────────────────────────────────────────────────
   (async function init() {
     try {
       const data = await Api.getConnections();
       cp.connections = data.connections;
 
-      // Default connection mindkét panelnek
+      // Default connection for both panels
       panelConnection.left  = data.default;
       panelConnection.right = data.default;
 
-      // Ha csak 1 connection van, auto-connect
-      // Ha több van, picker csak ha Ctrl+nyit vagy panel titlere kattint
+      // If only 1 connection, auto-connect
+      // If multiple, picker only on Ctrl+open or panel title click
       loadDatabases('left');
       loadDatabases('right');
     } catch(e) {
