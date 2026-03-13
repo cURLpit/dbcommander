@@ -364,6 +364,18 @@
   .dialog-btn:hover { background: var(--nc-cyan); }
   .dialog-btn.secondary { background: var(--nc-bg); color: var(--nc-fg); border: 1px solid var(--nc-fg); }
   .dialog-btn.secondary:hover { background: #222; }
+  .dialog-input {
+    background: var(--nc-bg);
+    color: var(--nc-yellow);
+    border: 1px solid var(--nc-cyan);
+    padding: 4px 8px;
+    font-family: inherit;
+    font-size: 14px;
+    width: 100%;
+    box-sizing: border-box;
+    outline: none;
+  }
+  .dialog-input:focus { border-color: var(--nc-fg); }
 
   /* ── QUICK VIEW PANEL ── */
   #quickview {
@@ -1274,6 +1286,18 @@ $(function(){
           target: { db: tgtDb, table: tgtTable },
           mode,
         }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+        throw new Error(err.error || `HTTP ${r.status}`);
+      }
+      return r.json();
+    },
+    async createDatabase(name) {
+      const r = await apiFetch(`${API_BASE}/databases`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
       });
       if (!r.ok) {
         const err = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
@@ -2757,13 +2781,74 @@ $(function(){
   }
 
   function doCreate() {
-    showDialog('Create New', `<span style="color:var(--nc-fg)">Create:</span><br><br><span style="color:var(--nc-cyan)">[ ] Table &nbsp; [ ] View &nbsp; [ ] Database</span><br><br><span style="color:var(--nc-fg)">Name: </span><span style="color:var(--nc-yellow)">___________</span>`, ['Create','Cancel']);
+    const meta = panelMeta[state.active];
+
+    if (meta.level === 'databases') {
+      // Create Database
+      const $input = $('<input type="text" class="dialog-input">').attr('placeholder', 'database_name');
+      const $body  = $('<div>').append(
+        $('<div style="color:var(--nc-fg);margin-bottom:8px">').text('Create new database:'),
+        $input
+      );
+
+      showDialog('F7 Create Database', $body[0].outerHTML, ['Create', 'Cancel'], async () => {
+        const name = $('#dialog-overlay input.dialog-input').val().trim();
+        if (!name) return;
+        activeApiSide = state.active;
+        try {
+          await Api.createDatabase(name);
+          await loadDatabases(state.active);
+          // Move cursor to the new database
+          const items = state.panels[state.active].data;
+          const idx   = items.findIndex(i => i.name === name);
+          if (idx >= 0) state.panels[state.active].cursor = idx;
+          renderPanel(state.active);
+        } catch(e) {
+          showDialog('✗ Create Failed', `<span style="color:var(--nc-red)">${$('<div>').text(e.message).html()}</span>`, ['OK']);
+        }
+      });
+
+      // Focus input after dialog opens, Enter triggers Create
+      setTimeout(() => {
+        const $inp = $('#dialog-overlay input.dialog-input').focus();
+        $inp.on('keydown', function(e) {
+          if (e.key === 'Enter') { e.preventDefault(); $('#dialog-buttons button:first').click(); }
+        });
+      }, 50);
+
+    } else if (meta.level === 'tables') {
+      showDialog('F7 Create Table', `<span style="color:var(--nc-yellow)">Create Table is not yet implemented.</span>`, ['OK']);
+    }
   }
 
   function doDrop() {
     const item = currentItem();
     const meta = panelMeta[state.active];
-    if (!item || item.type === 'parent' || !meta.db) return;
+    if (!item || item.type === 'parent') return;
+
+    // Database level – drop database
+    if (meta.level === 'databases' && item.type === 'db') {
+      const safeName = $('<div>').text(item.name).html();
+      showDialog('⚠ Drop Database',
+        `Drop database <span style="color:var(--nc-red);font-weight:bold">${safeName}</span>?<br><br>` +
+        `<span style="color:var(--nc-yellow)">All tables and data will be permanently deleted!</span><br><br>` +
+        `<span style="color:var(--nc-fg);font-size:11px">Will execute: <span style="color:var(--nc-cyan)">DROP DATABASE \`${safeName}\`</span></span>`,
+        ['Drop!', 'Cancel'],
+        async () => {
+          activeApiSide = state.active;
+          try {
+            await Api.runSql('', `DROP DATABASE \`${item.name.replace(/`/g, '``')}\``);
+            loadDatabases(state.active);
+          } catch (err) {
+            showDialog('Error', `<span style="color:var(--nc-red)">${$('<div>').text(err.message).html()}</span>`, ['OK']);
+          }
+        }
+      );
+      return;
+    }
+
+    // Table level
+    if (!meta.db) return;
     if (item.type !== 'TABLE' && item.type !== 'VIEW') {
       showDialog('⚠ Drop', `<span style="color:var(--nc-yellow)">Only tables and views can be dropped here.</span>`, ['OK']);
       return;
