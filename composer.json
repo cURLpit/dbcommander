@@ -11,7 +11,11 @@
     "psr/http-factory": "^1.0",
     "nyholm/psr7": "^1.8",
     "nyholm/psr7-server": "^1.1",
-    "curlpit/curlpit": "^1.0"
+    "curlpit/curlpit": "^1.0",
+    "middlewares/access-log": "^2.2",
+    "monolog/monolog": "^2.11",
+    "middlewares/debugbar": "^2.2",
+    "middlewares/client-ip": "^2.1"
   },
   "autoload": {
     "psr-4": {
