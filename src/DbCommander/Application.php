@@ -45,7 +45,7 @@ final class Application extends BaseApplication
 
     protected function defaultConfigLoader(): ConfigLoader
     {
-        return ConfigLoader::fromFile(dirname(__DIR__, 2) . '/src/App/Config/middleware.json');
+        return ConfigLoader::fromFile(dirname(__DIR__, 2) . '/config/middleware.json');
     }
 
     // ── Middleware factory ────────────────────────────────────
@@ -113,7 +113,10 @@ final class Application extends BaseApplication
             return new ConnectionListHandler($this->config, $rf, $sf);
         }
         if ($shortName === 'FrontendHandler') {
-            return new FrontendHandler($rf, $sf, dirname(__DIR__, 2) . '/resources/app.html');
+            $assetBuilder = new \DbCommander\Asset\AssetBuilder(
+                appEnv: defined('APP_ENV') ? APP_ENV : 'prod',
+            );
+            return new FrontendHandler($rf, $sf, dirname(__DIR__, 2) . '/resources/app.html', $assetBuilder);
         }
 
         return new class($shortName, $rf, $sf) implements RequestHandlerInterface {

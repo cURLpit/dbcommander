@@ -8,6 +8,11 @@ use Curlpit\Core\Emitter;
 use DbCommander\Application;
 use DbCommander\Config\ConnectionConfig;
 
+// ── Environment ───────────────────────────────────────────────────────────────
+$envFile = __DIR__ . '/../.env';
+$env     = is_file($envFile) ? (parse_ini_file($envFile) ?: []) : [];
+define('APP_ENV', $env['APP_ENV'] ?? 'prod');
+
 // ── PSR-17 factory auto-detect ────────────────────────────────────────────────
 if (class_exists(\Nyholm\Psr7\Factory\Psr17Factory::class)) {
     $factory         = new \Nyholm\Psr7\Factory\Psr17Factory();
