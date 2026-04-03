@@ -6,6 +6,38 @@
       }
     },
     {
+      "Middlewares\\AccessLog": {
+        "autowire": {
+          "logger": {
+            "class": "Monolog\\Logger",
+            "args": [
+              "access",
+              [{ "class": "Monolog\\Handler\\StreamHandler", "args": ["../logs/access.log", 200] }]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "Middlewares\\Debugbar": {}
+    },
+    {
+      "Middlewares\\ClientIp": {
+        "calls": [["attribute", ["client-ip"]]]
+      }
+    },
+    {
+      "Middlewares\\BasicAuthentication": {
+        "autowire": {
+          "users": { "admin": "secret" }
+        },
+        "calls": [
+          ["realm", ["DBCommander"]],
+          ["attribute", ["username"]]
+        ]
+      }
+    },
+    {
       "DbCommander\\Http\\Middleware\\CorsMiddleware": {
         "allowed_origins": ["*"]
       }
