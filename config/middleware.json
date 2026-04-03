@@ -27,17 +27,6 @@
       }
     },
     {
-      "Middlewares\\BasicAuthentication": {
-        "autowire": {
-          "users": { "admin": "secret" }
-        },
-        "calls": [
-          ["realm", ["DBCommander"]],
-          ["attribute", ["username"]]
-        ]
-      }
-    },
-    {
       "DbCommander\\Http\\Middleware\\CorsMiddleware": {
         "allowed_origins": ["*"]
       }
