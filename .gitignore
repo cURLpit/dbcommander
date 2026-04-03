@@ -1,3 +1,6 @@
 /vendor/
 composer.lock
 config/connections.json
+.env
+/public/assets/
+/logs/

@@ -16,11 +16,21 @@
   "autoload": {
     "psr-4": {
       "DbCommander\\": "src/DbCommander/",
+      "DbCommander\\Asset\\": "src/Asset/",
+      "DbCommander\\Composer\\": "src/Composer/",
       "DbCommander\\Config\\": "src/Config/",
       "DbCommander\\Driver\\": "src/Driver/",
       "DbCommander\\Exception\\": "src/Exception/",
       "DbCommander\\Http\\": "src/Http/",
       "DbCommander\\Repository\\": "src/Repository/"
     }
+  },
+  "scripts": {
+    "post-install-cmd": [
+      "DbCommander\\Composer\\ScriptHandler::postInstall"
+    ],
+    "post-update-cmd": [
+      "DbCommander\\Composer\\ScriptHandler::postInstall"
+    ]
   }
 }
