@@ -101,6 +101,25 @@ $(function(){
       }
       return r.json();
     },
+    async copyDatabase(srcDb, tgtDb, srcConn, tgtConn, mode = 'append') {
+      const headers = { 'Content-Type': 'application/json' };
+      if (srcConn) headers['X-Connection']        = srcConn;
+      if (tgtConn) headers['X-Connection-Target'] = tgtConn;
+      const r = await fetch(`${API_BASE}/copy-database`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          source: { db: srcDb },
+          target: { db: tgtDb },
+          mode,
+        }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+        throw new Error(err.error || `HTTP ${r.status}`);
+      }
+      return r.json();
+    },
     async createTable(db, name) {
       const r = await apiFetch(`${API_BASE}/databases/${encodeURIComponent(db)}/tables`, {
         method: 'POST',
@@ -1782,7 +1801,98 @@ $(function(){
     const meta = panelMeta[state.active];
 
     if (meta.level === 'databases') {
-      showDialog('Copy Database', '<span style="color:var(--nc-yellow)">Copy Database is not yet implemented.</span>', ['OK']);
+      const item = currentItem();
+      if (!item || item.type === 'parent') {
+        showDialog('Copy Database', 'Select a DATABASE to copy.', ['OK']);
+        return;
+      }
+
+      const srcSide = state.active;
+      const tgtSide = srcSide === 'left' ? 'right' : 'left';
+      const srcConn = panelConnection[srcSide];
+      const tgtConn = panelConnection[tgtSide];
+      const connNote = srcConn !== tgtConn
+        ? '<br><span style="color:var(--nc-green);font-size:11px">\u2756 Cross-connection copy</span>'
+        : '';
+
+      const $input = $('<input type="text" class="dialog-input">').val(item.name + '_copy');
+      const $body = $('<div>').append(
+        $('<div style="margin-bottom:8px">').html(
+          'Copy database <span style="color:var(--nc-cyan)">' + (srcConn || 'local') + ' / ' + item.name + '</span>' + connNote
+        ),
+        $('<div style="color:var(--nc-fg);margin-bottom:4px;font-size:11px">').text('Target database name:'),
+        $input,
+        $('<div style="margin-top:10px;font-size:11px;color:var(--nc-fg)">').html(
+          'Target connection: <span style="color:var(--nc-yellow)">' + (tgtConn || 'local') + '</span>'
+        ),
+        $('<div style="margin-top:10px;font-size:11px">').append(
+          $('<span style="color:var(--nc-fg)">Mode:\u00a0</span>'),
+          $('<label style="margin-right:12px;cursor:pointer">').append(
+            $('<input type="radio" name="db-copy-mode" value="append" checked style="margin-right:4px">'),
+            $('<span style="color:var(--nc-cyan)">append</span>')
+          ),
+          $('<label style="cursor:pointer">').append(
+            $('<input type="radio" name="db-copy-mode" value="replace" style="margin-right:4px">'),
+            $('<span style="color:var(--nc-yellow)">replace</span>')
+          )
+        )
+      );
+
+      showDialog('F5 Copy Database', $body[0].outerHTML, ['Copy', 'Cancel'], async () => {
+        const tgtDb = $('#dialog-overlay input.dialog-input').val().trim();
+        if (!tgtDb) return;
+        const mode = $('#dialog-overlay input[name="db-copy-mode"]:checked').val() || 'append';
+
+        const srcEsc = $('<div>').text(item.name).html();
+        const tgtEsc = $('<div>').text(tgtDb).html();
+        const srcLabel = '<span style="color:var(--nc-cyan)">' + (srcConn || 'local') + ' / ' + srcEsc + '</span>';
+        const tgtLabel = '<span style="color:var(--nc-yellow)">' + (tgtConn || 'local') + ' / ' + tgtEsc + '</span>';
+
+        const $prog = $('<div>').css({
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 700, color: 'var(--nc-cyan)', fontFamily: 'monospace',
+          flexDirection: 'column', gap: '8px',
+        }).append(
+          $('<div>').text('Copying database ' + item.name + '\u2026'),
+          $('<div>').attr('id', 'copy-db-progress').css({ color: 'var(--nc-fg)', fontSize: '12px' }).text('Starting\u2026')
+        ).appendTo('body');
+
+        try {
+          activeApiSide = srcSide;
+          const result = await Api.copyDatabase(item.name, tgtDb, srcConn, tgtConn, mode);
+          $prog.remove();
+
+          const detailRows = (result.details || [])
+            .map(d =>
+              '<tr>'
+              + '<td style="color:var(--nc-cyan);padding-right:16px">' + $('<div>').text(d.table).html() + '</td>'
+              + '<td style="color:var(--nc-fg)">' + d.rows_inserted + ' rows</td>'
+              + '</tr>'
+            ).join('');
+          const detailHtml = detailRows
+            ? '<table style="margin-top:8px;font-size:11px;width:100%">' + detailRows + '</table>'
+            : '';
+
+          showDialog('Copy Complete',
+            'Copied ' + srcLabel + '<br>\u2192 ' + tgtLabel + '<br><br>'
+            + '<span style="color:var(--nc-green)">' + result.tables_copied + ' table(s),\u00a0' + result.rows_inserted + ' total rows inserted.</span>'
+            + detailHtml,
+            ['OK']
+          );
+          loadDatabases(tgtSide);
+        } catch(e) {
+          $prog.remove();
+          showDialog('Copy Failed', '<span style="color:var(--nc-red)">' + $('<div>').text(e.message).html() + '</span>', ['OK']);
+        }
+      });
+
+      setTimeout(() => {
+        const $inp = $('#dialog-overlay input.dialog-input').focus().select();
+        $inp.on('keydown', function(e) {
+          if (e.key === 'Enter') { e.preventDefault(); $('#dialog-buttons button:first').click(); }
+        });
+      }, 50);
       return;
     }
 

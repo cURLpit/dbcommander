@@ -49,6 +49,7 @@
           { "method": "GET",    "path": "/api/tables/{db}/{table}/structure", "handler": "StructureHandler"      },
           { "method": "POST",   "path": "/api/sql",                           "handler": "SqlHandler"            },
           { "method": "POST",   "path": "/api/copy",                          "handler": "CopyFlow"              },
+          { "method": "POST",   "path": "/api/copy-database",                 "handler": "DbCopyFlow"   },
           { "method": "PUT",    "path": "/api/tables/{db}/{table}/rows",      "handler": "UpdateRowHandler"      },
           { "method": "PUT",    "path": "/api/tables/{db}/{table}/structure", "handler": "ModifyColumnHandler"   },
           { "method": "DELETE", "path": "/api/tables/{db}/{table}",           "handler": "DropTableHandler"      }
@@ -83,6 +84,12 @@
       }
     },
     {
+      "Curlpit\\Core\\Middleware\\JumpMiddleware": {
+        "condition": { "type": "attr", "name": "__route_handler", "eq": "DbCopyFlow" },
+        "jump_to_label": "db_copy"
+      }
+    },
+    {
       "Curlpit\\Core\\Middleware\\DispatchMiddleware": {
         "label": "dispatch"
       }
@@ -106,6 +113,27 @@
     },
     {
       "DbCommander\\Http\\Middleware\\CopyResponseMiddleware": {}
+    },
+    {
+      "DbCommander\\Http\\Middleware\\DbCopyPrepareMiddleware": {
+        "label": "db_copy"
+      }
+    },
+    {
+      "Curlpit\\Core\\Middleware\\LoopMiddleware": {
+        "condition": { "type": "context", "name": "has_more" },
+        "max_iterations": 1000000,
+        "body": {
+          "middleware": [
+            { "DbCommander\\Http\\Middleware\\DbCopyIterateMiddleware": {} },
+            { "DbCommander\\Http\\Middleware\\TableCopySourceMiddleware": {} },
+            { "DbCommander\\Http\\Middleware\\TableCopyTargetMiddleware": {} }
+          ]
+        }
+      }
+    },
+    {
+      "DbCommander\\Http\\Middleware\\DbCopyResponseMiddleware": {}
     }
   ]
 }

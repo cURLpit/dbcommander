@@ -22,6 +22,9 @@ use DbCommander\Http\Handler\UpdateRowHandler;
 use DbCommander\Http\Middleware\ConnectionMiddleware;
 use DbCommander\Http\Middleware\CopyPrepareMiddleware;
 use DbCommander\Http\Middleware\CopyResponseMiddleware;
+use DbCommander\Http\Middleware\DbCopyIterateMiddleware;
+use DbCommander\Http\Middleware\DbCopyPrepareMiddleware;
+use DbCommander\Http\Middleware\DbCopyResponseMiddleware;
 use DbCommander\Http\Middleware\TableCopySourceMiddleware;
 use DbCommander\Http\Middleware\TableCopyTargetMiddleware;
 use DbCommander\Repository\DatabaseRepository;
@@ -97,6 +100,15 @@ final class Application extends BaseApplication
 
             \DbCommander\Http\Middleware\TableCopyTargetMiddleware::class =>
                 new TableCopyTargetMiddleware(),
+
+            \DbCommander\Http\Middleware\DbCopyPrepareMiddleware::class =>
+                new DbCopyPrepareMiddleware($rf, $sf),
+
+            \DbCommander\Http\Middleware\DbCopyIterateMiddleware::class =>
+                new DbCopyIterateMiddleware(),
+
+            \DbCommander\Http\Middleware\DbCopyResponseMiddleware::class =>
+                new DbCopyResponseMiddleware($rf, $sf),
 
             default => parent::instantiate($class, $options),
         };

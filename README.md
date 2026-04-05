@@ -36,7 +36,7 @@ DBCommander brings the classic two-panel file manager experience to MySQL. Navig
 - **Keyboard-first** – full NC-style navigation, F-key bar, Tab to switch panels
 - **F3 Row Viewer** – infinite scroll, column sort, cell expand, full-screen or panel-mode
 - **F4 Structure Editor** – edit column types, nullability, defaults inline
-- **F5 Copy** – batch copy tables between databases or connections, append or replace mode
+- **F5 Copy** – batch copy tables between databases or connections (append or replace); at the database list, copies an entire database (all tables, structure + data) to a target database
 - **F8 Drop** – drop tables and views with confirmation
 - **F9 Export** – CSV, JSON, or SQL INSERT, up to 50k rows
 - **F2 SQL Editor** – run arbitrary SQL, full-screen result viewer
@@ -100,6 +100,7 @@ Both `pdo` and `mysqli` drivers are supported.
 | GET | `/api/tables/{db}/{table}/structure` | Column definitions |
 | POST | `/api/sql` | Run arbitrary SQL |
 | POST | `/api/copy` | Batch copy table between databases/connections |
+| POST | `/api/copy-database` | Copy all tables from one database to another |
 | PUT | `/api/tables/{db}/{table}/rows` | Update a row |
 | PUT | `/api/tables/{db}/{table}/structure` | Modify a column |
 | DELETE | `/api/tables/{db}/{table}` | Drop table or view |
