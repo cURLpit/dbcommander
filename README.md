@@ -33,12 +33,13 @@ DBCommander brings the classic two-panel file manager experience to MySQL. Navig
 
 - **Dual-panel layout** – each panel has its own independent connection, database, and cursor
 - **Multiple connections** – switch connections per-panel via the title bar or Left/Right menu; cross-connection table copy works out of the box
-- **Keyboard-first** – full NC-style navigation, F-key bar, Tab to switch panels
+- **Keyboard-first** – full NC-style navigation, F-key bar, Tab to switch panels; Ctrl+F global search
 - **F3 Row Viewer** – infinite scroll, column sort, cell expand, full-screen or panel-mode
 - **F4 Structure Editor** – edit column types, nullability, defaults inline
 - **F5 Copy** – batch copy tables between databases or connections (append or replace); at the database list, copies an entire database (all tables, structure + data) to a target database
 - **F8 Drop** – drop tables and views with confirmation
 - **F9 Export** – CSV, JSON, or SQL INSERT, up to 50k rows
+- **Ctrl+F Search** – global LIKE search across all tables; scope to the current database or all databases on the connection; results grouped by table with match highlighting
 - **F2 SQL Editor** – run arbitrary SQL, full-screen result viewer
 - **Themes** – Norton Commander classic and DBCommander dark
 
@@ -101,6 +102,7 @@ Both `pdo` and `mysqli` drivers are supported.
 | POST | `/api/sql` | Run arbitrary SQL |
 | POST | `/api/copy` | Batch copy table between databases/connections |
 | POST | `/api/copy-database` | Copy all tables from one database to another |
+| POST | `/api/search` | Global search across tables; scope to a DB or all databases |
 | PUT | `/api/tables/{db}/{table}/rows` | Update a row |
 | PUT | `/api/tables/{db}/{table}/structure` | Modify a column |
 | DELETE | `/api/tables/{db}/{table}` | Drop table or view |

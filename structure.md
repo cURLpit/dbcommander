@@ -1,13 +1,14 @@
 # DBCommander Backend Structure
 
+```
 src/
   Config/
     ConnectionConfig.php       # JSON config loading + validation
   Driver/
-    DriverInterface.php        # common interface over PDO + mysqli
+    DriverInterface.php        # shared interface over PDO and mysqli
     PdoDriver.php
     MysqliDriver.php
-    DriverFactory.php          # instantiation based on config
+    DriverFactory.php          # instantiates driver from config
   Repository/
     DatabaseRepository.php     # SHOW DATABASES
     TableRepository.php        # SHOW TABLES, SHOW CREATE, etc.
@@ -25,6 +26,9 @@ src/
       DbCopyPrepareMiddleware.php    # db copy: validate, create target DB, list tables, init LoopContext
       DbCopyIterateMiddleware.php    # db copy loop body: set __copy_source/__copy_target, ensure schema, advance table index
       DbCopyResponseMiddleware.php   # db copy: final JSON response + ANALYZE all copied tables
+      SearchPrepareMiddleware.php    # search: validates, queries INFORMATION_SCHEMA for (db,table,columns[]), inits LoopContext
+      SearchTableMiddleware.php      # search loop body: one iteration = one table, WHERE col LIKE ? OR ..., appends results
+      SearchResponseMiddleware.php   # search: final JSON response with results + metadata
     Handler/
       DatabaseListHandler.php        # GET /databases
       TableListHandler.php           # GET /databases/{db}/tables
@@ -43,3 +47,4 @@ src/
 
 config/
   connections.json             # connection definitions
+```

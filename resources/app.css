@@ -285,6 +285,9 @@
   .fkey:hover .fkey-label { background: rgba(255,255,255,0.15); }
   .fkey.fkey-disabled { cursor: default; opacity: 0.4; }
   .fkey.fkey-disabled:hover .fkey-label { background: none; }
+  .fkey.fkey-alt-active .fkey-num   { background: var(--nc-yellow); }
+  .fkey.fkey-alt-active .fkey-label { color: var(--nc-yellow); }
+  #fkeybar.alt-mode .fkey:not(.fkey-alt-active):not(.fkey-fixed) { opacity: 0.25; }
   .fkey-num {
     background: var(--nc-selected);
     color: #000;

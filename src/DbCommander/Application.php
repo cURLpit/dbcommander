@@ -25,6 +25,9 @@ use DbCommander\Http\Middleware\CopyResponseMiddleware;
 use DbCommander\Http\Middleware\DbCopyIterateMiddleware;
 use DbCommander\Http\Middleware\DbCopyPrepareMiddleware;
 use DbCommander\Http\Middleware\DbCopyResponseMiddleware;
+use DbCommander\Http\Middleware\SearchPrepareMiddleware;
+use DbCommander\Http\Middleware\SearchResponseMiddleware;
+use DbCommander\Http\Middleware\SearchTableMiddleware;
 use DbCommander\Http\Middleware\TableCopySourceMiddleware;
 use DbCommander\Http\Middleware\TableCopyTargetMiddleware;
 use DbCommander\Repository\DatabaseRepository;
@@ -109,6 +112,15 @@ final class Application extends BaseApplication
 
             \DbCommander\Http\Middleware\DbCopyResponseMiddleware::class =>
                 new DbCopyResponseMiddleware($rf, $sf),
+
+            \DbCommander\Http\Middleware\SearchPrepareMiddleware::class =>
+                new SearchPrepareMiddleware($rf, $sf),
+
+            \DbCommander\Http\Middleware\SearchTableMiddleware::class =>
+                new SearchTableMiddleware(),
+
+            \DbCommander\Http\Middleware\SearchResponseMiddleware::class =>
+                new SearchResponseMiddleware($rf, $sf),
 
             default => parent::instantiate($class, $options),
         };

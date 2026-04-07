@@ -14,12 +14,20 @@
   <div id="menubar">
     <div class="menu-item" id="menu-left-conn"><span class="menu-hot">L</span>eft</div>
     <div class="menu-item" id="menu-file"><span class="menu-hot">F</span>ile</div>
-    <div class="menu-item"><span class="menu-hot">C</span>ommand</div>
+    <div class="menu-item" id="menu-command"><span class="menu-hot">C</span>ommand</div>
     <div class="menu-item" id="menu-options"><span class="menu-hot">O</span>ptions</div>
     <div class="menu-item" id="menu-right-conn"><span class="menu-hot">R</span>ight</div>
     <div style="flex:1"></div>
     <div class="menu-item" style="color:var(--nc-cyan);font-size:11px" id="client-ip"></div>
     <div class="menu-item" style="color:var(--nc-yellow)" id="clock">00:00:00</div>
+  </div>
+
+  <!-- COMMAND DROPDOWN -->
+  <div class="menu-dropdown" id="dropdown-command">
+    <div class="menu-dd-item" data-action="search">
+      <span class="menu-dd-check"> </span>
+      <span><span class="menu-hot">S</span>earch&hellip; &nbsp;<span style="opacity:.55">Alt+F7 / Ctrl+F</span></span>
+    </div>
   </div>
 
   <!-- OPTIONS DROPDOWN -->

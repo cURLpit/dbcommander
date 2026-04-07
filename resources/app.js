@@ -132,6 +132,20 @@ $(function(){
       }
       return r.json();
     },
+    async search(term, where, scope, conn) {
+      const headers = { 'Content-Type': 'application/json' };
+      if (conn) headers['X-Connection'] = conn;
+      const r = await fetch(`${API_BASE}/search`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ term, where, scope }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+        throw new Error(err.error || `HTTP ${r.status}`);
+      }
+      return r.json();
+    },
     async createDatabase(name) {
       const r = await apiFetch(`${API_BASE}/databases`, {
         method: 'POST',
@@ -440,28 +454,47 @@ $(function(){
     10: 'Quit',
   };
 
+  // Alt-mode fkey definitions: { fNum: { label, action } }
+  // Add entries here to register future Alt+Fn shortcuts.
+  const altFkeyDefs = {
+    7: { label: 'Search', action: () => doSearch() },
+  };
+
+  let altMode = false;
+
   function renderFkeyBar() {
-    const meta    = panelMeta[state.active];
-    const p       = state.panels[state.active];
-    const item    = p.data[p.cursor];
+    const meta     = panelMeta[state.active];
+    const p        = state.panels[state.active];
+    const item     = p.data[p.cursor];
     const isParent = item?.type === 'parent';
-    const ctx     = fkeyDefs[meta.level] || {};
+    const ctx      = fkeyDefs[meta.level] || {};
+
+    $('#fkeybar').toggleClass('alt-mode', altMode);
 
     for (let f = 1; f <= 10; f++) {
       const $btn = $(`#fkeybar [data-f="${f}"]`);
       if (!$btn.length) continue;
 
-      let label;
-      if (fkeyFixed[f] !== undefined) {
-        label = fkeyFixed[f];
-      } else if (isParent) {
-        label = null;
+      const isFixed = fkeyFixed[f] !== undefined;
+      const isAlt   = altFkeyDefs[f] !== undefined;
+
+      $btn.toggleClass('fkey-fixed',      isFixed);
+      $btn.toggleClass('fkey-alt-active', altMode && isAlt);
+
+      let label, disabled;
+
+      if (altMode) {
+        if (isAlt)        { label = altFkeyDefs[f].label; disabled = false; }
+        else if (isFixed) { label = fkeyFixed[f];         disabled = false; }
+        else              { label = null;                  disabled = true;  }
       } else {
-        label = ctx[f] !== undefined ? ctx[f] : null;
+        if (isFixed)      { label = fkeyFixed[f];                        disabled = false;        }
+        else if (isParent){ label = null;                                 disabled = true;         }
+        else              { label = ctx[f] !== undefined ? ctx[f] : null; disabled = label === null; }
       }
 
       $btn.find('.fkey-label').text(label ?? '──');
-      $btn.toggleClass('fkey-disabled', label === null);
+      $btn.toggleClass('fkey-disabled', disabled);
     }
   }
 
@@ -516,11 +549,24 @@ $(function(){
   }
 
   // ── KEYBOARD ───────────────────────────────────────────────
+  $(document).on('keyup', function(e) {
+    if (e.key === 'Alt' && altMode) {
+      altMode = false;
+      renderFkeyBar();
+    }
+  });
+
   $(document).on('keydown', function(e) {
     // If row viewer is open, its handler takes over (except in panel mode, where the other panel stays active)
     if ($('#rowviewer').hasClass('visible') && !$('#rowviewer').hasClass('panel-mode')) return;
     // If structure editor is open, its handler takes over
     if ($('#structedit').hasClass('visible') && !$('#structedit').hasClass('panel-mode')) return;
+    // Alt key alone: show alt fkey bar
+    if (e.key === 'Alt') {
+      altMode = true;
+      renderFkeyBar();
+      return;
+    }
     // Ha SQL result viewer nyitva van
     if ($('#sqlresult').hasClass('visible')) {
       if (e.key === 'Escape' || e.key === 'F10') { e.preventDefault(); closeSqlResult(); }
@@ -621,6 +667,17 @@ $(function(){
     if (e.key === ':' || (e.ctrlKey && e.key === 'p')) {
       e.preventDefault();
       $('#cmdline-input').focus();
+    }
+    if (e.ctrlKey && e.key === 'f') {
+      e.preventDefault();
+      doSearch();
+    }
+    if (e.altKey && e.key.startsWith('F')) {
+      const fNum = parseInt(e.key.slice(1));
+      if (altFkeyDefs[fNum]) {
+        e.preventDefault();
+        altFkeyDefs[fNum].action();
+      }
     }
   });
 
@@ -1055,7 +1112,7 @@ $(function(){
     setTimeout(() => {
       const $inp = $('#dialog-overlay input.dialog-input').first().focus();
       $inp.on('keydown', function(e) {
-        if (e.key === 'Enter') { e.preventDefault(); $('#dialog-buttons button:first').click(); }
+        if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); $('#dialog-buttons button:first').click(); }
       });
     }, 50);
   }
@@ -1292,6 +1349,10 @@ $(function(){
 
   $(document).on('click', '#fkeybar .fkey:not(.fkey-disabled)', function() {
     const f = parseInt($(this).data('f'));
+    if (altMode && altFkeyDefs[f]) {
+      altFkeyDefs[f].action();
+      return;
+    }
     const fkeys = {1:showHelp, 2:doSqlEditor, 3:doView, 4:doEdit, 5:doCopy, 6:doMove, 7:doCreate, 8:doDrop, 9:doExport, 10:doQuit};
     if (fkeys[f]) fkeys[f]();
   });
@@ -1890,7 +1951,7 @@ $(function(){
       setTimeout(() => {
         const $inp = $('#dialog-overlay input.dialog-input').focus().select();
         $inp.on('keydown', function(e) {
-          if (e.key === 'Enter') { e.preventDefault(); $('#dialog-buttons button:first').click(); }
+          if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); $('#dialog-buttons button:first').click(); }
         });
       }, 50);
       return;
@@ -1968,6 +2029,173 @@ $(function(){
     );
   }
 
+
+  // ── GLOBAL SEARCH (Ctrl+F) ───────────────────────────────────────────────
+  function doSearch() {
+    const meta = panelMeta[state.active];
+    const conn = panelConnection[state.active];
+    const item = currentItem();
+
+    // Derive db name for scope label:
+    //   tables level                          → meta.db
+    //   databases level, cursor on a db item  → that db
+    //   databases level otherwise             → null (db option hidden)
+    let scopeDb = null;
+    if (meta.level === 'tables' && meta.db) {
+      scopeDb = meta.db;
+    } else if (meta.level === 'databases' && item && item.type === 'db') {
+      scopeDb = item.name;
+    }
+
+    // checked default:
+    //   databases level → all checked
+    //   tables level    → db checked (user is inside an open database)
+    const chkAll = (meta.level !== 'tables') ? 'checked' : '';
+    const chkDb  = (meta.level === 'tables')  ? 'checked' : '';
+
+    const connLabel  = conn || 'local';
+    const scopeDbEsc = scopeDb ? $('<div>').text(scopeDb).html() : '';
+
+    const scopeDbRow = scopeDb
+      ? `<label style="cursor:pointer;display:block;margin-top:4px">
+           <input type="radio" name="search-scope" value="db" style="margin-right:5px" ${chkDb}>
+           Database <span style="color:var(--nc-cyan)">${scopeDbEsc}</span> only
+         </label>`
+      : '';
+
+    const bodyHtml = `
+      <div style="color:var(--nc-fg);margin-bottom:8px;font-size:11px">Search term:</div>
+      <input type="text" class="dialog-input" placeholder="search term">
+      <div style="color:var(--nc-fg);margin:10px 0 4px;font-size:11px">WHERE <span style="opacity:.55;font-size:10px">(optional extra SQL filter)</span></div>
+      <input type="text" class="dialog-input" id="search-where-input" placeholder="e.g. status = 'active' AND created_at > '2024-01-01'" style="margin-bottom:6px;font-family:monospace;font-size:11px">
+      <div style="color:var(--nc-fg);margin:10px 0 4px;font-size:11px">Scope:</div>
+      <label style="cursor:pointer;display:block;margin-top:4px">
+        <input type="radio" name="search-scope" value="all" style="margin-right:5px" ${chkAll}>
+        All databases on <span style="color:var(--nc-cyan)">${connLabel}</span>
+      </label>
+      ${scopeDbRow}
+    `;
+
+    showDialog('Ctrl+F Search', bodyHtml, ['Search', 'Cancel'], async () => {
+      const term  = $('#dialog-overlay input.dialog-input').eq(0).val().trim();
+      const where = $('#search-where-input').val().trim();
+      if (!term && !where) { showDialog('Search', 'Enter a search term or a WHERE clause.', ['OK']); return; }
+      const selectedScope = $('#dialog-overlay input[name="search-scope"]:checked').val();
+      const scope = (selectedScope === 'db' && scopeDb) ? { db: scopeDb } : {};
+
+      const $prog = $('<div>').css({
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 700, color: 'var(--nc-cyan)', fontFamily: 'monospace',
+        flexDirection: 'column', gap: '8px',
+      }).append(
+        $('<div>').text('Searching\u2026'),
+        $('<div>').css({ color: 'var(--nc-fg)', fontSize: '12px' }).text(scope.db ? connLabel + ' / ' + scope.db : connLabel + ' / all databases')
+      ).appendTo('body');
+
+      try {
+        activeApiSide = state.active;
+        const result = await Api.search(term, where, scope, conn);
+        $prog.remove();
+        showSearchResults(result);
+      } catch(e) {
+        $prog.remove();
+        showDialog('Search Failed', '<span style="color:var(--nc-red)">' + $('<div>').text(e.message).html() + '</span>', ['OK']);
+      }
+    });
+
+    setTimeout(() => {
+      const $inp = $('#dialog-overlay input.dialog-input').first().focus();
+      $inp.on('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); $('#dialog-buttons button:first').click(); }
+      });
+    }, 50);
+  }
+
+  function showSearchResults(result) {
+    const termEsc = $('<div>').text(result.term).html();
+    const results = result.results || [];
+
+    let truncNote = result.truncated
+      ? '<div style="color:var(--nc-yellow);font-size:10px;margin-top:4px">'
+        + '\u26a0 Results truncated at ' + result.result_count + ' rows'
+        + ' (' + result.tables_searched + '/' + result.tables_total + ' tables searched)'
+        + '</div>'
+      : '<div style="font-size:10px;color:var(--nc-fg);margin-top:4px">'
+        + result.result_count + ' result(s) in '
+        + result.tables_searched + ' table(s) searched'
+        + '</div>';
+
+    if (results.length === 0) {
+      showDialog(
+        'Search: \u201c' + termEsc + '\u201d',
+        '<span style="color:var(--nc-fg)">No results found.</span><br>' + truncNote,
+        ['OK']
+      );
+      return;
+    }
+
+    // Group by db.table for compact display
+    const grouped = {};
+    results.forEach(r => {
+      const key = r.db + '.' + r.table;
+      if (!grouped[key]) grouped[key] = { db: r.db, table: r.table, hits: [] };
+      grouped[key].hits.push(r);
+    });
+
+    const termRe = result.term
+      ? new RegExp('(' + result.term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi')
+      : null;
+
+    let html = truncNote + '<div style="margin-top:10px;max-height:340px;overflow-y:auto">';
+    Object.values(grouped).forEach(g => {
+      const dbEsc  = $('<div>').text(g.db).html();
+      const tblEsc = $('<div>').text(g.table).html();
+      // Table header – clickable link navigates active panel to that table
+      html += '<div style="margin-bottom:12px">';
+      html += '<div style="font-size:11px;margin-bottom:4px">'
+            + '<a class="sr-table-link" href="#"'
+            +   ' data-db="'  + dbEsc  + '"'
+            +   ' data-tbl="' + tblEsc + '"'
+            +   ' style="color:var(--nc-cyan);text-decoration:none;cursor:pointer"'
+            + '>'
+            + dbEsc + ' / <strong>' + tblEsc + '</strong>'
+            + '</a>'
+            + ' <span style="color:var(--nc-fg);font-size:10px">(' + g.hits.length + ')</span>'
+            + '</div>';
+      g.hits.forEach(hit => {
+        const colEsc = $('<div>').text(hit.column || '').html();
+        const valRaw = String(hit.value || '');
+        const valEsc = termRe
+          ? $('<div>').text(valRaw.slice(0, 120)).html()
+              .replace(termRe, '<strong style="color:var(--nc-yellow)">$1</strong>')
+          : $('<div>').text(valRaw.slice(0, 120)).html();
+        html += '<div style="font-size:11px;padding:2px 0 2px 12px;color:var(--nc-fg);border-left:2px solid var(--nc-panel-border)">'
+              + (hit.column ? '<span style="color:var(--nc-green)">' + colEsc + ':</span> ' : '')
+              + valEsc
+              + '</div>';
+      });
+      html += '</div>';
+    });
+    html += '</div>';
+
+    showDialog('Search: \u201c' + termEsc + '\u201d', html, ['OK']);
+
+    // Wire table links – navigate active panel to the target table, close dialog
+    $('#dialog-overlay').off('click.sr').on('click.sr', '.sr-table-link', function(e) {
+      e.preventDefault();
+      const db  = $(this).data('db');
+      const tbl = $(this).data('tbl');
+      const side = state.active;
+      closeDialog();
+      loadTables(side, db).then(() => {
+        const p   = state.panels[side];
+        const idx = p.data.findIndex(item => item.name === tbl);
+        if (idx >= 0) { p.cursor = idx; renderAll(); }
+      });
+    });
+  }
+
   function doMove() {
     const meta = panelMeta[state.active];
     const item = currentItem();
@@ -2015,7 +2243,7 @@ $(function(){
       setTimeout(() => {
         const $inp = $('#dialog-overlay input.dialog-input').focus();
         $inp.on('keydown', function(e) {
-          if (e.key === 'Enter') { e.preventDefault(); $('#dialog-buttons button:first').click(); }
+          if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); $('#dialog-buttons button:first').click(); }
         });
       }, 50);
 
@@ -2048,7 +2276,7 @@ $(function(){
       setTimeout(() => {
         const $inp = $('#dialog-overlay input.dialog-input').focus();
         $inp.on('keydown', function(e) {
-          if (e.key === 'Enter') { e.preventDefault(); $('#dialog-buttons button:first').click(); }
+          if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); $('#dialog-buttons button:first').click(); }
         });
       }, 50);
     }
@@ -2122,6 +2350,7 @@ $(function(){
         <tr><td style="color:var(--nc-cyan)">F7</td><td>Create</td><td style="color:var(--nc-cyan)">F8</td><td>Drop</td></tr>
         <tr><td style="color:var(--nc-cyan)">F9</td><td>Export</td><td style="color:var(--nc-cyan)">F10</td><td>Quit</td></tr>
         <tr><td style="color:var(--nc-cyan)">: or Ctrl+P</td><td colspan="3">Focus SQL command line</td></tr>
+        <tr><td style="color:var(--nc-cyan)">Ctrl+F / Alt+F7</td><td colspan="3">Global search across tables</td></tr>
         <tr><td style="color:var(--nc-cyan)">PgUp/PgDn</td><td colspan="3">Scroll list fast</td></tr>
       </table>`,
       ['OK']);
@@ -2182,6 +2411,13 @@ $(function(){
   // ── DROPDOWN MENU ──────────────────────────────────────────
   let dropdownOpen = false;
 
+  function closeAllDropdowns() {
+    dropdownOpen = false;
+    $('#dropdown-command').removeClass('visible');
+    $('#dropdown-options').removeClass('visible');
+    $('#menu-command, #menu-options').removeClass('active');
+  }
+
   $('#menu-left-conn').on('click',  () => openConnPicker('left'));
   $('#menu-right-conn').on('click', () => openConnPicker('right'));
 
@@ -2191,16 +2427,34 @@ $(function(){
     openConnPicker(side);
   });
 
+  $('#menu-command').on('click', function(e) {
+    e.stopPropagation();
+    const isCmd = dropdownOpen === 'command';
+    closeAllDropdowns();
+    if (!isCmd) {
+      const r = $('#menu-command')[0].getBoundingClientRect();
+      $('#dropdown-command').css({ top: r.bottom + 'px', left: r.left + 'px' }).addClass('visible');
+      $('#menu-command').addClass('active');
+      dropdownOpen = 'command';
+    }
+  });
+
+  $('#dropdown-command').on('click', '.menu-dd-item', function(e) {
+    e.stopPropagation();
+    const action = $(this).data('action');
+    closeAllDropdowns();
+    if (action === 'search') doSearch();
+  });
+
   $('#menu-options').on('click', function(e) {
     e.stopPropagation();
-    dropdownOpen = !dropdownOpen;
-    if (dropdownOpen) {
+    const isOpt = dropdownOpen === 'options';
+    closeAllDropdowns();
+    if (!isOpt) {
       const r = $('#menu-options')[0].getBoundingClientRect();
       $('#dropdown-options').css({ top: r.bottom + 'px', left: r.left + 'px' }).addClass('visible');
       $('#menu-options').addClass('active');
-    } else {
-      $('#dropdown-options').removeClass('visible');
-      $('#menu-options').removeClass('active');
+      dropdownOpen = 'options';
     }
   });
 
@@ -2209,16 +2463,12 @@ $(function(){
     const action = $(this).data('action');
     if (action === 'theme-nc')  setTheme('nc');
     if (action === 'theme-dbc') setTheme('dbc');
-    dropdownOpen = false;
-    $('#dropdown-options').removeClass('visible');
-    $('#menu-options').removeClass('active');
+    closeAllDropdowns();
   });
 
   $(document).on('click.dropdown', function() {
     if (dropdownOpen) {
-      dropdownOpen = false;
-      $('#dropdown-options').removeClass('visible');
-      $('#menu-options').removeClass('active');
+      closeAllDropdowns();
     }
   });
 
